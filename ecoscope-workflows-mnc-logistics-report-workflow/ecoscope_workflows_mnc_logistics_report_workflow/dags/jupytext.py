@@ -751,6 +751,13 @@ drop_airline_complaint_prefix = (
     drop_column_prefix.set_task_instance_id("drop_airline_complaint_prefix")
     .handle_errors()
     .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
     .partial(
         df=normalize_airline_comp_vals,
         prefix="event_details__",
@@ -1103,7 +1110,7 @@ pivot_airstrip_ops = (
         df=airstrip_op_summary_table,
         index_col="camp_lodge",
         columns_col="arrival_departure",
-        values_col="number_of_clients",
+        values_col="no_of_clients",
         reset_idx=True,
         **pivot_airstrip_ops_params,
     )
