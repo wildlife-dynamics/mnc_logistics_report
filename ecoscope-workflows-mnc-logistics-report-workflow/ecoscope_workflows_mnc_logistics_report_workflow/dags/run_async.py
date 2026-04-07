@@ -22,6 +22,12 @@ from ecoscope_workflows_core.tasks.transformation import (
 )
 from ecoscope_workflows_core.tasks.transformation import filter_df as filter_df
 from ecoscope_workflows_core.tasks.transformation import map_columns as map_columns
+from ecoscope_workflows_ext_custom.tasks.io import (
+    process_events_details as process_events_details,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    drop_column_prefix as drop_column_prefix,
+)
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import summarize_df as summarize_df
 from ecoscope_workflows_ext_ecoscope.tasks.io import get_events as get_events
 from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df as persist_df
@@ -30,7 +36,6 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
 )
 from ecoscope_workflows_ext_mnc.tasks import capitalize_text as capitalize_text
 from ecoscope_workflows_ext_mnc.tasks import convert_to_int as convert_to_int
-from ecoscope_workflows_ext_mnc.tasks import filter_columns as filter_columns
 from ecoscope_workflows_ext_mnc.tasks import pivot_df as pivot_df
 from ecoscope_workflows_ext_mnc.tasks import (
     remove_brackets_from_column as remove_brackets_from_column,
@@ -38,7 +43,6 @@ from ecoscope_workflows_ext_mnc.tasks import (
 from ecoscope_workflows_ext_mnc.tasks import (
     replace_missing_with_label as replace_missing_with_label,
 )
-from ecoscope_workflows_ext_mnc.tasks import transform_columns as transform_columns
 
 from ..params import Params
 
@@ -55,31 +59,38 @@ def main(params: Params):
         "extract_event_date": ["get_events_data"],
         "events_temporal": ["extract_event_date", "groupers"],
         "filter_balloon_events": ["events_temporal"],
-        "normalize_balloon_values": ["filter_balloon_events"],
-        "rename_balloon_boma": ["normalize_balloon_values"],
-        "remove_balloon_brackets": ["rename_balloon_boma"],
-        "replace_lodge_nulls": ["remove_balloon_brackets"],
-        "convert_passengers_int": ["replace_lodge_nulls"],
-        "generate_balloon_table": ["convert_passengers_int"],
-        "capitalize_balloon_co": ["generate_balloon_table"],
-        "capitalize_lodge": ["capitalize_balloon_co"],
-        "persist_balloon_summary": ["capitalize_lodge"],
-        "filter_airstrip_events": ["events_temporal"],
-        "normalize_airstrip_values": ["filter_airstrip_events"],
-        "rename_airstrip": ["normalize_airstrip_values"],
-        "remove_air_brackets": ["rename_airstrip"],
-        "replace_camp_lodge_nulls": ["remove_air_brackets"],
-        "convert_clients_int": ["replace_camp_lodge_nulls"],
-        "lodge_scase": ["convert_clients_int"],
-        "airstrip_summary_table": ["lodge_scase"],
-        "pivot_airstrip_table": ["airstrip_summary_table"],
-        "persist_airstrip_summary": ["pivot_airstrip_table"],
-        "filter_am_events": ["events_temporal"],
-        "normalize_am_values": ["filter_am_events"],
-        "rename_am": ["normalize_am_values"],
-        "filter_cols": ["rename_am"],
-        "capitalize_activity_col": ["filter_cols"],
-        "persist_air_maintenance": ["capitalize_activity_col"],
+        "filter_airstrip_operations": ["events_temporal"],
+        "filter_airstrip_maintenance": ["events_temporal"],
+        "filter_airline_complaints": ["events_temporal"],
+        "process_balloon_details": ["filter_balloon_events", "er_client_name"],
+        "normalize_balloon_values": ["process_balloon_details"],
+        "drop_balloon_prefix": ["normalize_balloon_values"],
+        "process_airstrip_details": ["filter_airstrip_operations", "er_client_name"],
+        "normalize_airstrip_op_values": ["process_airstrip_details"],
+        "drop_airstrip_op_prefix": ["normalize_airstrip_op_values"],
+        "process_airstrip_maint_details": [
+            "filter_airstrip_maintenance",
+            "er_client_name",
+        ],
+        "normalize_airstrip_maint_vals": ["process_airstrip_maint_details"],
+        "drop_airstrip_maintenance_prefix": ["normalize_airstrip_maint_vals"],
+        "process_airline_comp_details": ["filter_airline_complaints", "er_client_name"],
+        "normalize_airline_comp_vals": ["process_airline_comp_details"],
+        "drop_airline_complaint_prefix": ["normalize_airline_comp_vals"],
+        "map_balloon_columns": ["drop_balloon_prefix"],
+        "remove_balloon_brackets": ["map_balloon_columns"],
+        "persist_balloon_landing": ["remove_balloon_brackets"],
+        "map_airstrip_op_columns": ["drop_airstrip_op_prefix"],
+        "remove_airstrip_op_brackets": ["map_airstrip_op_columns"],
+        "replace_airstrip_op_nulls": ["remove_airstrip_op_brackets"],
+        "convert_airstrip_op_ints": ["replace_airstrip_op_nulls"],
+        "capitalize_camp_lodge": ["convert_airstrip_op_ints"],
+        "airstrip_op_summary_table": ["capitalize_camp_lodge"],
+        "pivot_airstrip_ops": ["airstrip_op_summary_table"],
+        "convert_pivot_int": ["pivot_airstrip_ops"],
+        "persist_airstrip_operations": ["convert_pivot_int"],
+        "map_airstrip_maintenance": ["drop_airstrip_maintenance_prefix"],
+        "persist_airstrip_maintenance": ["map_airstrip_maintenance"],
         "mnc_events_dashboard": ["workflow_details", "time_range", "groupers"],
     }
 
@@ -147,6 +158,12 @@ def main(params: Params):
                     "created_at",
                     "event_details",
                     "patrols",
+                ],
+                "event_types": [
+                    "balloon_landing",
+                    "airstrip_operations",
+                    "airstrip_maintenance",
+                    "airline_complaint",
                 ],
                 "raise_on_empty": True,
                 "include_details": True,
@@ -226,227 +243,9 @@ def main(params: Params):
             | (params_dict.get("filter_balloon_events") or {}),
             method="call",
         ),
-        "normalize_balloon_values": Node(
-            async_task=normalize_json_column.validate()
-            .set_task_instance_id("normalize_balloon_values")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "column": "event_details",
-                "df": DependsOn("filter_balloon_events"),
-                "skip_if_not_exists": True,
-                "sort_columns": True,
-            }
-            | (params_dict.get("normalize_balloon_values") or {}),
-            method="call",
-        ),
-        "rename_balloon_boma": Node(
-            async_task=transform_columns.validate()
-            .set_task_instance_id("rename_balloon_boma")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "rename_columns": {
-                    "event_details__of_passengers": "no_of_passengers",
-                    "event_details__balloon_company": "balloon_company",
-                    "event_details__where_are_clients_staying": "lodge",
-                },
-                "skip_missing_rename": True,
-                "required_columns": [
-                    "event_details__of_passengers",
-                    "event_details__balloon_company",
-                    "date",
-                    "event_details__where_are_clients_staying",
-                ],
-                "df": DependsOn("normalize_balloon_values"),
-            }
-            | (params_dict.get("rename_balloon_boma") or {}),
-            method="call",
-        ),
-        "remove_balloon_brackets": Node(
-            async_task=remove_brackets_from_column.validate()
-            .set_task_instance_id("remove_balloon_brackets")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("rename_balloon_boma"),
-                "columns": [
-                    "lodge",
-                    "balloon_company",
-                ],
-            }
-            | (params_dict.get("remove_balloon_brackets") or {}),
-            method="call",
-        ),
-        "replace_lodge_nulls": Node(
-            async_task=replace_missing_with_label.validate()
-            .set_task_instance_id("replace_lodge_nulls")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("remove_balloon_brackets"),
-                "columns": [
-                    "lodge",
-                ],
-                "label": "other",
-            }
-            | (params_dict.get("replace_lodge_nulls") or {}),
-            method="call",
-        ),
-        "convert_passengers_int": Node(
-            async_task=convert_to_int.validate()
-            .set_task_instance_id("convert_passengers_int")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("replace_lodge_nulls"),
-                "columns": [
-                    "no_of_passengers",
-                ],
-                "errors": "coerce",
-                "fill_value": 0,
-                "inplace": False,
-            }
-            | (params_dict.get("convert_passengers_int") or {}),
-            method="call",
-        ),
-        "generate_balloon_table": Node(
-            async_task=summarize_df.validate()
-            .set_task_instance_id("generate_balloon_table")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "groupby_cols": [
-                    "date",
-                    "balloon_company",
-                    "lodge",
-                ],
-                "summary_params": [
-                    {
-                        "display_name": "no_of_passengers",
-                        "aggregator": "sum",
-                        "column": "no_of_passengers",
-                    },
-                ],
-                "reset_index": True,
-                "df": DependsOn("convert_passengers_int"),
-            }
-            | (params_dict.get("generate_balloon_table") or {}),
-            method="call",
-        ),
-        "capitalize_balloon_co": Node(
-            async_task=capitalize_text.validate()
-            .set_task_instance_id("capitalize_balloon_co")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("generate_balloon_table"),
-                "column": "balloon_company",
-            }
-            | (params_dict.get("capitalize_balloon_co") or {}),
-            method="call",
-        ),
-        "capitalize_lodge": Node(
-            async_task=capitalize_text.validate()
-            .set_task_instance_id("capitalize_lodge")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("capitalize_balloon_co"),
-                "column": "lodge",
-            }
-            | (params_dict.get("capitalize_lodge") or {}),
-            method="call",
-        ),
-        "persist_balloon_summary": Node(
-            async_task=persist_df.validate()
-            .set_task_instance_id("persist_balloon_summary")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "filetype": "csv",
-                "df": DependsOn("capitalize_lodge"),
-                "filename": "balloon_landing_by_date",
-            }
-            | (params_dict.get("persist_balloon_summary") or {}),
-            method="call",
-        ),
-        "filter_airstrip_events": Node(
+        "filter_airstrip_operations": Node(
             async_task=filter_df.validate()
-            .set_task_instance_id("filter_airstrip_events")
+            .set_task_instance_id("filter_airstrip_operations")
             .handle_errors()
             .with_tracing()
             .skipif(
@@ -464,233 +263,12 @@ def main(params: Params):
                 "df": DependsOn("events_temporal"),
                 "reset_index": False,
             }
-            | (params_dict.get("filter_airstrip_events") or {}),
+            | (params_dict.get("filter_airstrip_operations") or {}),
             method="call",
         ),
-        "normalize_airstrip_values": Node(
-            async_task=normalize_json_column.validate()
-            .set_task_instance_id("normalize_airstrip_values")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "column": "event_details",
-                "df": DependsOn("filter_airstrip_events"),
-                "skip_if_not_exists": True,
-                "sort_columns": True,
-            }
-            | (params_dict.get("normalize_airstrip_values") or {}),
-            method="call",
-        ),
-        "rename_airstrip": Node(
-            async_task=map_columns.validate()
-            .set_task_instance_id("rename_airstrip")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "raise_if_not_found": True,
-                "rename_columns": {
-                    "event_details__guide": "guide",
-                    "event_details__airline": "airline",
-                    "event_details__attendant": "attendant",
-                    "event_details__camplodge": "camp_lodge",
-                    "event_details__flight_number": "flight_number",
-                    "event_details__number_of_clients": "number_of_clients",
-                    "event_details__arrival_or_departure": "arrival_or_departure",
-                },
-                "df": DependsOn("normalize_airstrip_values"),
-            }
-            | (params_dict.get("rename_airstrip") or {}),
-            method="call",
-        ),
-        "remove_air_brackets": Node(
-            async_task=remove_brackets_from_column.validate()
-            .set_task_instance_id("remove_air_brackets")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("rename_airstrip"),
-                "columns": [
-                    "airline",
-                    "attendant",
-                    "camp_lodge",
-                    "arrival_or_departure",
-                ],
-            }
-            | (params_dict.get("remove_air_brackets") or {}),
-            method="call",
-        ),
-        "replace_camp_lodge_nulls": Node(
-            async_task=replace_missing_with_label.validate()
-            .set_task_instance_id("replace_camp_lodge_nulls")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("remove_air_brackets"),
-                "columns": [
-                    "camp_lodge",
-                ],
-                "label": "other",
-            }
-            | (params_dict.get("replace_camp_lodge_nulls") or {}),
-            method="call",
-        ),
-        "convert_clients_int": Node(
-            async_task=convert_to_int.validate()
-            .set_task_instance_id("convert_clients_int")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("replace_camp_lodge_nulls"),
-                "columns": [
-                    "number_of_clients",
-                ],
-                "errors": "coerce",
-                "fill_value": 0,
-                "inplace": False,
-            }
-            | (params_dict.get("convert_clients_int") or {}),
-            method="call",
-        ),
-        "lodge_scase": Node(
-            async_task=capitalize_text.validate()
-            .set_task_instance_id("lodge_scase")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("convert_clients_int"),
-                "column": "camp_lodge",
-            }
-            | (params_dict.get("lodge_scase") or {}),
-            method="call",
-        ),
-        "airstrip_summary_table": Node(
-            async_task=summarize_df.validate()
-            .set_task_instance_id("airstrip_summary_table")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("lodge_scase"),
-                "groupby_cols": [
-                    "camp_lodge",
-                    "arrival_or_departure",
-                ],
-                "summary_params": [
-                    {
-                        "display_name": "no_of_passengers",
-                        "aggregator": "sum",
-                        "column": "number_of_clients",
-                        "decimal_places": 0,
-                    },
-                ],
-                "reset_index": True,
-            }
-            | (params_dict.get("airstrip_summary_table") or {}),
-            method="call",
-        ),
-        "pivot_airstrip_table": Node(
-            async_task=pivot_df.validate()
-            .set_task_instance_id("pivot_airstrip_table")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "df": DependsOn("airstrip_summary_table"),
-                "index_col": "camp_lodge",
-                "columns_col": "arrival_or_departure",
-                "values_col": "no_of_passengers",
-                "reset_idx": True,
-            }
-            | (params_dict.get("pivot_airstrip_table") or {}),
-            method="call",
-        ),
-        "persist_airstrip_summary": Node(
-            async_task=persist_df.validate()
-            .set_task_instance_id("persist_airstrip_summary")
-            .handle_errors()
-            .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
-            .set_executor("lithops"),
-            partial={
-                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "filetype": "csv",
-                "df": DependsOn("pivot_airstrip_table"),
-                "filename": "airstrip_arrivals_and_departure",
-            }
-            | (params_dict.get("persist_airstrip_summary") or {}),
-            method="call",
-        ),
-        "filter_am_events": Node(
+        "filter_airstrip_maintenance": Node(
             async_task=filter_df.validate()
-            .set_task_instance_id("filter_am_events")
+            .set_task_instance_id("filter_airstrip_maintenance")
             .handle_errors()
             .with_tracing()
             .skipif(
@@ -708,12 +286,50 @@ def main(params: Params):
                 "df": DependsOn("events_temporal"),
                 "reset_index": False,
             }
-            | (params_dict.get("filter_am_events") or {}),
+            | (params_dict.get("filter_airstrip_maintenance") or {}),
             method="call",
         ),
-        "normalize_am_values": Node(
+        "filter_airline_complaints": Node(
+            async_task=filter_df.validate()
+            .set_task_instance_id("filter_airline_complaints")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "column_name": "event_type",
+                "op": "equal",
+                "value": "airline_complaint",
+                "df": DependsOn("events_temporal"),
+                "reset_index": False,
+            }
+            | (params_dict.get("filter_airline_complaints") or {}),
+            method="call",
+        ),
+        "process_balloon_details": Node(
+            async_task=process_events_details.validate()
+            .set_task_instance_id("process_balloon_details")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("filter_balloon_events"),
+                "client": DependsOn("er_client_name"),
+                "map_to_titles": True,
+                "ordered": True,
+            }
+            | (params_dict.get("process_balloon_details") or {}),
+            method="call",
+        ),
+        "normalize_balloon_values": Node(
             async_task=normalize_json_column.validate()
-            .set_task_instance_id("normalize_am_values")
+            .set_task_instance_id("normalize_balloon_values")
             .handle_errors()
             .with_tracing()
             .skipif(
@@ -726,42 +342,45 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "column": "event_details",
-                "df": DependsOn("filter_am_events"),
+                "df": DependsOn("process_balloon_details"),
                 "skip_if_not_exists": True,
                 "sort_columns": True,
             }
-            | (params_dict.get("normalize_am_values") or {}),
+            | (params_dict.get("normalize_balloon_values") or {}),
             method="call",
         ),
-        "rename_am": Node(
-            async_task=transform_columns.validate()
-            .set_task_instance_id("rename_am")
+        "drop_balloon_prefix": Node(
+            async_task=drop_column_prefix.validate()
+            .set_task_instance_id("drop_balloon_prefix")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
-                "rename_columns": {
-                    "event_details__maintenance_type": "activity",
-                },
-                "skip_missing_rename": True,
-                "required_columns": [
-                    "event_details__maintenance_type",
-                ],
-                "df": DependsOn("normalize_am_values"),
+                "df": DependsOn("normalize_balloon_values"),
+                "prefix": "event_details__",
+                "duplicate_strategy": "keep_original",
             }
-            | (params_dict.get("rename_am") or {}),
+            | (params_dict.get("drop_balloon_prefix") or {}),
             method="call",
         ),
-        "filter_cols": Node(
-            async_task=filter_columns.validate()
-            .set_task_instance_id("filter_cols")
+        "process_airstrip_details": Node(
+            async_task=process_events_details.validate()
+            .set_task_instance_id("process_airstrip_details")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("filter_airstrip_operations"),
+                "client": DependsOn("er_client_name"),
+                "map_to_titles": True,
+                "ordered": True,
+            }
+            | (params_dict.get("process_airstrip_details") or {}),
+            method="call",
+        ),
+        "normalize_airstrip_op_values": Node(
+            async_task=normalize_json_column.validate()
+            .set_task_instance_id("normalize_airstrip_op_values")
             .handle_errors()
             .with_tracing()
             .skipif(
@@ -773,18 +392,171 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
-                "df": DependsOn("rename_am"),
-                "columns": [
+                "column": "event_details",
+                "df": DependsOn("process_airstrip_details"),
+                "skip_if_not_exists": True,
+                "sort_columns": True,
+            }
+            | (params_dict.get("normalize_airstrip_op_values") or {}),
+            method="call",
+        ),
+        "drop_airstrip_op_prefix": Node(
+            async_task=drop_column_prefix.validate()
+            .set_task_instance_id("drop_airstrip_op_prefix")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("normalize_airstrip_op_values"),
+                "prefix": "event_details__",
+                "duplicate_strategy": "keep_original",
+            }
+            | (params_dict.get("drop_airstrip_op_prefix") or {}),
+            method="call",
+        ),
+        "process_airstrip_maint_details": Node(
+            async_task=process_events_details.validate()
+            .set_task_instance_id("process_airstrip_maint_details")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("filter_airstrip_maintenance"),
+                "client": DependsOn("er_client_name"),
+                "map_to_titles": True,
+                "ordered": True,
+            }
+            | (params_dict.get("process_airstrip_maint_details") or {}),
+            method="call",
+        ),
+        "normalize_airstrip_maint_vals": Node(
+            async_task=normalize_json_column.validate()
+            .set_task_instance_id("normalize_airstrip_maint_vals")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "column": "event_details",
+                "df": DependsOn("process_airstrip_maint_details"),
+                "skip_if_not_exists": True,
+                "sort_columns": True,
+            }
+            | (params_dict.get("normalize_airstrip_maint_vals") or {}),
+            method="call",
+        ),
+        "drop_airstrip_maintenance_prefix": Node(
+            async_task=drop_column_prefix.validate()
+            .set_task_instance_id("drop_airstrip_maintenance_prefix")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("normalize_airstrip_maint_vals"),
+                "prefix": "event_details__",
+                "duplicate_strategy": "keep_original",
+            }
+            | (params_dict.get("drop_airstrip_maintenance_prefix") or {}),
+            method="call",
+        ),
+        "process_airline_comp_details": Node(
+            async_task=process_events_details.validate()
+            .set_task_instance_id("process_airline_comp_details")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("filter_airline_complaints"),
+                "client": DependsOn("er_client_name"),
+                "map_to_titles": True,
+                "ordered": True,
+            }
+            | (params_dict.get("process_airline_comp_details") or {}),
+            method="call",
+        ),
+        "normalize_airline_comp_vals": Node(
+            async_task=normalize_json_column.validate()
+            .set_task_instance_id("normalize_airline_comp_vals")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "column": "event_details",
+                "df": DependsOn("process_airline_comp_details"),
+                "skip_if_not_exists": True,
+                "sort_columns": True,
+            }
+            | (params_dict.get("normalize_airline_comp_vals") or {}),
+            method="call",
+        ),
+        "drop_airline_complaint_prefix": Node(
+            async_task=drop_column_prefix.validate()
+            .set_task_instance_id("drop_airline_complaint_prefix")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("normalize_airline_comp_vals"),
+                "prefix": "event_details__",
+                "duplicate_strategy": "keep_original",
+            }
+            | (params_dict.get("drop_airline_complaint_prefix") or {}),
+            method="call",
+        ),
+        "map_balloon_columns": Node(
+            async_task=map_columns.validate()
+            .set_task_instance_id("map_balloon_columns")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("drop_balloon_prefix"),
+                "retain_columns": [
                     "date",
-                    "activity",
+                    "Balloon Company",
+                    "Where are clients staying?",
+                    "# of passengers",
                 ],
+                "rename_columns": {
+                    "Balloon Company": "balloon_company",
+                    "Where are clients staying?": "where_are_clients_staying",
+                    "# of passengers": "no_of_passengers",
+                },
+                "raise_if_not_found": False,
             }
-            | (params_dict.get("filter_cols") or {}),
+            | (params_dict.get("map_balloon_columns") or {}),
             method="call",
         ),
-        "capitalize_activity_col": Node(
-            async_task=capitalize_text.validate()
-            .set_task_instance_id("capitalize_activity_col")
+        "remove_balloon_brackets": Node(
+            async_task=remove_brackets_from_column.validate()
+            .set_task_instance_id("remove_balloon_brackets")
             .handle_errors()
             .with_tracing()
             .skipif(
@@ -796,15 +568,18 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
-                "df": DependsOn("filter_cols"),
-                "column": "activity",
+                "df": DependsOn("map_balloon_columns"),
+                "columns": [
+                    "balloon_company",
+                    "where_are_clients_staying",
+                ],
             }
-            | (params_dict.get("capitalize_activity_col") or {}),
+            | (params_dict.get("remove_balloon_brackets") or {}),
             method="call",
         ),
-        "persist_air_maintenance": Node(
+        "persist_balloon_landing": Node(
             async_task=persist_df.validate()
-            .set_task_instance_id("persist_air_maintenance")
+            .set_task_instance_id("persist_balloon_landing")
             .handle_errors()
             .with_tracing()
             .skipif(
@@ -818,10 +593,268 @@ def main(params: Params):
             partial={
                 "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "filetype": "csv",
-                "df": DependsOn("capitalize_activity_col"),
-                "filename": "airstrip_maintenance_table",
+                "df": DependsOn("remove_balloon_brackets"),
+                "filename": "balloon_landing_summary_table",
             }
-            | (params_dict.get("persist_air_maintenance") or {}),
+            | (params_dict.get("persist_balloon_landing") or {}),
+            method="call",
+        ),
+        "map_airstrip_op_columns": Node(
+            async_task=map_columns.validate()
+            .set_task_instance_id("map_airstrip_op_columns")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("drop_airstrip_op_prefix"),
+                "rename_columns": {
+                    "Airline": "airline",
+                    "Arrival or departure": "arrival_departure",
+                    "Attendant": "attendant",
+                    "Camp/Lodge": "camp_lodge",
+                    "Number of clients": "no_of_clients",
+                },
+                "raise_if_not_found": False,
+            }
+            | (params_dict.get("map_airstrip_op_columns") or {}),
+            method="call",
+        ),
+        "remove_airstrip_op_brackets": Node(
+            async_task=remove_brackets_from_column.validate()
+            .set_task_instance_id("remove_airstrip_op_brackets")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("map_airstrip_op_columns"),
+                "columns": [
+                    "airline",
+                    "arrival_departure",
+                    "attendant",
+                    "camp_lodge",
+                ],
+            }
+            | (params_dict.get("remove_airstrip_op_brackets") or {}),
+            method="call",
+        ),
+        "replace_airstrip_op_nulls": Node(
+            async_task=replace_missing_with_label.validate()
+            .set_task_instance_id("replace_airstrip_op_nulls")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("remove_airstrip_op_brackets"),
+                "columns": [
+                    "camp_lodge",
+                ],
+                "label": "other",
+            }
+            | (params_dict.get("replace_airstrip_op_nulls") or {}),
+            method="call",
+        ),
+        "convert_airstrip_op_ints": Node(
+            async_task=convert_to_int.validate()
+            .set_task_instance_id("convert_airstrip_op_ints")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("replace_airstrip_op_nulls"),
+                "columns": [
+                    "no_of_clients",
+                ],
+                "errors": "coerce",
+                "fill_value": 0,
+                "inplace": False,
+            }
+            | (params_dict.get("convert_airstrip_op_ints") or {}),
+            method="call",
+        ),
+        "capitalize_camp_lodge": Node(
+            async_task=capitalize_text.validate()
+            .set_task_instance_id("capitalize_camp_lodge")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("convert_airstrip_op_ints"),
+                "column": "camp_lodge",
+            }
+            | (params_dict.get("capitalize_camp_lodge") or {}),
+            method="call",
+        ),
+        "airstrip_op_summary_table": Node(
+            async_task=summarize_df.validate()
+            .set_task_instance_id("airstrip_op_summary_table")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("capitalize_camp_lodge"),
+                "groupby_cols": [
+                    "camp_lodge",
+                    "arrival_departure",
+                ],
+                "summary_params": [
+                    {
+                        "display_name": "no_of_clients",
+                        "aggregator": "sum",
+                        "column": "no_of_clients",
+                        "decimal_places": 0,
+                    },
+                ],
+                "reset_index": True,
+            }
+            | (params_dict.get("airstrip_op_summary_table") or {}),
+            method="call",
+        ),
+        "pivot_airstrip_ops": Node(
+            async_task=pivot_df.validate()
+            .set_task_instance_id("pivot_airstrip_ops")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("airstrip_op_summary_table"),
+                "index_col": "camp_lodge",
+                "columns_col": "arrival_departure",
+                "values_col": "no_of_clients",
+                "reset_idx": True,
+            }
+            | (params_dict.get("pivot_airstrip_ops") or {}),
+            method="call",
+        ),
+        "convert_pivot_int": Node(
+            async_task=convert_to_int.validate()
+            .set_task_instance_id("convert_pivot_int")
+            .handle_errors()
+            .with_tracing()
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("pivot_airstrip_ops"),
+                "columns": [
+                    "arrival",
+                    "departure",
+                ],
+                "errors": "coerce",
+                "fill_value": 0,
+                "inplace": False,
+            }
+            | (params_dict.get("convert_pivot_int") or {}),
+            method="call",
+        ),
+        "persist_airstrip_operations": Node(
+            async_task=persist_df.validate()
+            .set_task_instance_id("persist_airstrip_operations")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "filetype": "csv",
+                "df": DependsOn("convert_pivot_int"),
+                "filename": "airstrip_operations_summary_table",
+            }
+            | (params_dict.get("persist_airstrip_operations") or {}),
+            method="call",
+        ),
+        "map_airstrip_maintenance": Node(
+            async_task=map_columns.validate()
+            .set_task_instance_id("map_airstrip_maintenance")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("drop_airstrip_maintenance_prefix"),
+                "retain_columns": [
+                    "date",
+                    "Maintenance type",
+                ],
+                "rename_columns": {
+                    "Maintenance type": "maintenance_type",
+                },
+                "raise_if_not_found": False,
+            }
+            | (params_dict.get("map_airstrip_maintenance") or {}),
+            method="call",
+        ),
+        "persist_airstrip_maintenance": Node(
+            async_task=persist_df.validate()
+            .set_task_instance_id("persist_airstrip_maintenance")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "filetype": "csv",
+                "df": DependsOn("map_airstrip_maintenance"),
+                "filename": "airstrip_maintenance_summary_table",
+            }
+            | (params_dict.get("persist_airstrip_maintenance") or {}),
             method="call",
         ),
         "mnc_events_dashboard": Node(
