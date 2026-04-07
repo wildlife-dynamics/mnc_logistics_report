@@ -23,7 +23,6 @@ get_events = create_task_magicmock(  # 🧪
     anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
     func_name="get_events",  # 🧪
 )  # 🧪
-from ecoscope_workflows_core.tasks.results import gather_dashboard as gather_dashboard
 from ecoscope_workflows_core.tasks.skip import (
     any_dependency_skipped as any_dependency_skipped,
 )
@@ -35,15 +34,38 @@ from ecoscope_workflows_core.tasks.transformation import (
     extract_column_as_type as extract_column_as_type,
 )
 from ecoscope_workflows_core.tasks.transformation import filter_df as filter_df
-from ecoscope_workflows_core.tasks.transformation import map_columns as map_columns
-from ecoscope_workflows_ext_ecoscope.tasks.analysis import summarize_df as summarize_df
-from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df as persist_df
+
+process_events_details = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_custom.tasks.io",  # 🧪
+    func_name="process_events_details",  # 🧪
+)  # 🧪
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    drop_column_prefix as drop_column_prefix,
+)
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     normalize_json_column as normalize_json_column,
 )
+
+process_events_details = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_custom.tasks.io",  # 🧪
+    func_name="process_events_details",  # 🧪
+)  # 🧪
+
+process_events_details = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_custom.tasks.io",  # 🧪
+    func_name="process_events_details",  # 🧪
+)  # 🧪
+
+process_events_details = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_custom.tasks.io",  # 🧪
+    func_name="process_events_details",  # 🧪
+)  # 🧪
+from ecoscope_workflows_core.tasks.results import gather_dashboard as gather_dashboard
+from ecoscope_workflows_core.tasks.transformation import map_columns as map_columns
+from ecoscope_workflows_ext_ecoscope.tasks.analysis import summarize_df as summarize_df
+from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df as persist_df
 from ecoscope_workflows_ext_mnc.tasks import capitalize_text as capitalize_text
 from ecoscope_workflows_ext_mnc.tasks import convert_to_int as convert_to_int
-from ecoscope_workflows_ext_mnc.tasks import filter_columns as filter_columns
 from ecoscope_workflows_ext_mnc.tasks import pivot_df as pivot_df
 from ecoscope_workflows_ext_mnc.tasks import (
     remove_brackets_from_column as remove_brackets_from_column,
@@ -51,7 +73,6 @@ from ecoscope_workflows_ext_mnc.tasks import (
 from ecoscope_workflows_ext_mnc.tasks import (
     replace_missing_with_label as replace_missing_with_label,
 )
-from ecoscope_workflows_ext_mnc.tasks import transform_columns as transform_columns
 
 from ..params import Params
 
@@ -124,7 +145,12 @@ def main(params: Params):
                 "event_details",
                 "patrols",
             ],
-            event_types=[],
+            event_types=[
+                "balloon_landing",
+                "airstrip_operations",
+                "airstrip_maintenance",
+                "airline_complaint",
+            ],
             raise_on_empty=True,
             include_details=True,
             include_updates=False,
@@ -204,6 +230,90 @@ def main(params: Params):
         .call()
     )
 
+    filter_airstrip_operations = (
+        filter_df.validate()
+        .set_task_instance_id("filter_airstrip_operations")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            column_name="event_type",
+            op="equal",
+            value="airstrip_operations",
+            df=events_temporal,
+            reset_index=False,
+            **(params_dict.get("filter_airstrip_operations") or {}),
+        )
+        .call()
+    )
+
+    filter_airstrip_maintenance = (
+        filter_df.validate()
+        .set_task_instance_id("filter_airstrip_maintenance")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            column_name="event_type",
+            op="equal",
+            value="airstrip_maintenance",
+            df=events_temporal,
+            reset_index=False,
+            **(params_dict.get("filter_airstrip_maintenance") or {}),
+        )
+        .call()
+    )
+
+    filter_airline_complaints = (
+        filter_df.validate()
+        .set_task_instance_id("filter_airline_complaints")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            column_name="event_type",
+            op="equal",
+            value="airline_complaint",
+            df=events_temporal,
+            reset_index=False,
+            **(params_dict.get("filter_airline_complaints") or {}),
+        )
+        .call()
+    )
+
+    process_balloon_details = (
+        process_events_details.validate()
+        .set_task_instance_id("process_balloon_details")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=filter_balloon_events,
+            client=er_client_name,
+            map_to_titles=True,
+            ordered=True,
+            **(params_dict.get("process_balloon_details") or {}),
+        )
+        .call()
+    )
+
     normalize_balloon_values = (
         normalize_json_column.validate()
         .set_task_instance_id("normalize_balloon_values")
@@ -218,7 +328,7 @@ def main(params: Params):
         )
         .partial(
             column="event_details",
-            df=filter_balloon_events,
+            df=process_balloon_details,
             skip_if_not_exists=True,
             sort_columns=True,
             **(params_dict.get("normalize_balloon_values") or {}),
@@ -226,9 +336,38 @@ def main(params: Params):
         .call()
     )
 
-    rename_balloon_boma = (
-        transform_columns.validate()
-        .set_task_instance_id("rename_balloon_boma")
+    drop_balloon_prefix = (
+        drop_column_prefix.validate()
+        .set_task_instance_id("drop_balloon_prefix")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=normalize_balloon_values,
+            prefix="event_details__",
+            duplicate_strategy="keep_original",
+            **(params_dict.get("drop_balloon_prefix") or {}),
+        )
+        .call()
+    )
+
+    process_airstrip_details = (
+        process_events_details.validate()
+        .set_task_instance_id("process_airstrip_details")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=filter_airstrip_operations,
+            client=er_client_name,
+            map_to_titles=True,
+            ordered=True,
+            **(params_dict.get("process_airstrip_details") or {}),
+        )
+        .call()
+    )
+
+    normalize_airstrip_op_values = (
+        normalize_json_column.validate()
+        .set_task_instance_id("normalize_airstrip_op_values")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -239,22 +378,159 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            drop_columns=[],
-            retain_columns=[],
-            rename_columns={
-                "event_details__of_passengers": "no_of_passengers",
-                "event_details__balloon_company": "balloon_company",
-                "event_details__where_are_clients_staying": "lodge",
-            },
-            skip_missing_rename=True,
-            required_columns=[
-                "event_details__of_passengers",
-                "event_details__balloon_company",
-                "date",
-                "event_details__where_are_clients_staying",
+            column="event_details",
+            df=process_airstrip_details,
+            skip_if_not_exists=True,
+            sort_columns=True,
+            **(params_dict.get("normalize_airstrip_op_values") or {}),
+        )
+        .call()
+    )
+
+    drop_airstrip_op_prefix = (
+        drop_column_prefix.validate()
+        .set_task_instance_id("drop_airstrip_op_prefix")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=normalize_airstrip_op_values,
+            prefix="event_details__",
+            duplicate_strategy="keep_original",
+            **(params_dict.get("drop_airstrip_op_prefix") or {}),
+        )
+        .call()
+    )
+
+    process_airstrip_maint_details = (
+        process_events_details.validate()
+        .set_task_instance_id("process_airstrip_maint_details")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=filter_airstrip_maintenance,
+            client=er_client_name,
+            map_to_titles=True,
+            ordered=True,
+            **(params_dict.get("process_airstrip_maint_details") or {}),
+        )
+        .call()
+    )
+
+    normalize_airstrip_maint_vals = (
+        normalize_json_column.validate()
+        .set_task_instance_id("normalize_airstrip_maint_vals")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
             ],
-            df=normalize_balloon_values,
-            **(params_dict.get("rename_balloon_boma") or {}),
+            unpack_depth=1,
+        )
+        .partial(
+            column="event_details",
+            df=process_airstrip_maint_details,
+            skip_if_not_exists=True,
+            sort_columns=True,
+            **(params_dict.get("normalize_airstrip_maint_vals") or {}),
+        )
+        .call()
+    )
+
+    drop_airstrip_maintenance_prefix = (
+        drop_column_prefix.validate()
+        .set_task_instance_id("drop_airstrip_maintenance_prefix")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=normalize_airstrip_maint_vals,
+            prefix="event_details__",
+            duplicate_strategy="keep_original",
+            **(params_dict.get("drop_airstrip_maintenance_prefix") or {}),
+        )
+        .call()
+    )
+
+    process_airline_comp_details = (
+        process_events_details.validate()
+        .set_task_instance_id("process_airline_comp_details")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=filter_airline_complaints,
+            client=er_client_name,
+            map_to_titles=True,
+            ordered=True,
+            **(params_dict.get("process_airline_comp_details") or {}),
+        )
+        .call()
+    )
+
+    normalize_airline_comp_vals = (
+        normalize_json_column.validate()
+        .set_task_instance_id("normalize_airline_comp_vals")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            column="event_details",
+            df=process_airline_comp_details,
+            skip_if_not_exists=True,
+            sort_columns=True,
+            **(params_dict.get("normalize_airline_comp_vals") or {}),
+        )
+        .call()
+    )
+
+    drop_airline_complaint_prefix = (
+        drop_column_prefix.validate()
+        .set_task_instance_id("drop_airline_complaint_prefix")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=normalize_airline_comp_vals,
+            prefix="event_details__",
+            duplicate_strategy="keep_original",
+            **(params_dict.get("drop_airline_complaint_prefix") or {}),
+        )
+        .call()
+    )
+
+    map_balloon_columns = (
+        map_columns.validate()
+        .set_task_instance_id("map_balloon_columns")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=drop_balloon_prefix,
+            drop_columns=[],
+            retain_columns=[
+                "date",
+                "Balloon Company",
+                "Where are clients staying?",
+                "# of passengers",
+            ],
+            rename_columns={
+                "Balloon Company": "balloon_company",
+                "Where are clients staying?": "where_are_clients_staying",
+                "# of passengers": "no_of_passengers",
+            },
+            raise_if_not_found=False,
+            **(params_dict.get("map_balloon_columns") or {}),
         )
         .call()
     )
@@ -272,128 +548,16 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            df=rename_balloon_boma,
-            columns=["lodge", "balloon_company"],
+            df=map_balloon_columns,
+            columns=["balloon_company", "where_are_clients_staying"],
             **(params_dict.get("remove_balloon_brackets") or {}),
         )
         .call()
     )
 
-    replace_lodge_nulls = (
-        replace_missing_with_label.validate()
-        .set_task_instance_id("replace_lodge_nulls")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            df=remove_balloon_brackets,
-            columns=["lodge"],
-            label="other",
-            **(params_dict.get("replace_lodge_nulls") or {}),
-        )
-        .call()
-    )
-
-    convert_passengers_int = (
-        convert_to_int.validate()
-        .set_task_instance_id("convert_passengers_int")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            df=replace_lodge_nulls,
-            columns=["no_of_passengers"],
-            errors="coerce",
-            fill_value=0,
-            inplace=False,
-            **(params_dict.get("convert_passengers_int") or {}),
-        )
-        .call()
-    )
-
-    generate_balloon_table = (
-        summarize_df.validate()
-        .set_task_instance_id("generate_balloon_table")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            groupby_cols=["date", "balloon_company", "lodge"],
-            summary_params=[
-                {
-                    "display_name": "no_of_passengers",
-                    "aggregator": "sum",
-                    "column": "no_of_passengers",
-                }
-            ],
-            reset_index=True,
-            df=convert_passengers_int,
-            **(params_dict.get("generate_balloon_table") or {}),
-        )
-        .call()
-    )
-
-    capitalize_balloon_co = (
-        capitalize_text.validate()
-        .set_task_instance_id("capitalize_balloon_co")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            df=generate_balloon_table,
-            column="balloon_company",
-            **(params_dict.get("capitalize_balloon_co") or {}),
-        )
-        .call()
-    )
-
-    capitalize_lodge = (
-        capitalize_text.validate()
-        .set_task_instance_id("capitalize_lodge")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            df=capitalize_balloon_co,
-            column="lodge",
-            **(params_dict.get("capitalize_lodge") or {}),
-        )
-        .call()
-    )
-
-    persist_balloon_summary = (
+    persist_balloon_landing = (
         persist_df.validate()
-        .set_task_instance_id("persist_balloon_summary")
+        .set_task_instance_id("persist_balloon_landing")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -406,61 +570,16 @@ def main(params: Params):
         .partial(
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filetype="csv",
-            df=capitalize_lodge,
-            filename="balloon_landing_by_date",
-            **(params_dict.get("persist_balloon_summary") or {}),
+            df=remove_balloon_brackets,
+            filename="balloon_landing_summary_table",
+            **(params_dict.get("persist_balloon_landing") or {}),
         )
         .call()
     )
 
-    filter_airstrip_events = (
-        filter_df.validate()
-        .set_task_instance_id("filter_airstrip_events")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            column_name="event_type",
-            op="equal",
-            value="airstrip_operations",
-            df=events_temporal,
-            reset_index=False,
-            **(params_dict.get("filter_airstrip_events") or {}),
-        )
-        .call()
-    )
-
-    normalize_airstrip_values = (
-        normalize_json_column.validate()
-        .set_task_instance_id("normalize_airstrip_values")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            column="event_details",
-            df=filter_airstrip_events,
-            skip_if_not_exists=True,
-            sort_columns=True,
-            **(params_dict.get("normalize_airstrip_values") or {}),
-        )
-        .call()
-    )
-
-    rename_airstrip = (
+    map_airstrip_op_columns = (
         map_columns.validate()
-        .set_task_instance_id("rename_airstrip")
+        .set_task_instance_id("map_airstrip_op_columns")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -471,27 +590,25 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            raise_if_not_found=True,
+            df=drop_airstrip_op_prefix,
             drop_columns=[],
             retain_columns=[],
             rename_columns={
-                "event_details__guide": "guide",
-                "event_details__airline": "airline",
-                "event_details__attendant": "attendant",
-                "event_details__camplodge": "camp_lodge",
-                "event_details__flight_number": "flight_number",
-                "event_details__number_of_clients": "number_of_clients",
-                "event_details__arrival_or_departure": "arrival_or_departure",
+                "Airline": "airline",
+                "Arrival or departure": "arrival_departure",
+                "Attendant": "attendant",
+                "Camp/Lodge": "camp_lodge",
+                "Number of clients": "no_of_clients",
             },
-            df=normalize_airstrip_values,
-            **(params_dict.get("rename_airstrip") or {}),
+            raise_if_not_found=False,
+            **(params_dict.get("map_airstrip_op_columns") or {}),
         )
         .call()
     )
 
-    remove_air_brackets = (
+    remove_airstrip_op_brackets = (
         remove_brackets_from_column.validate()
-        .set_task_instance_id("remove_air_brackets")
+        .set_task_instance_id("remove_airstrip_op_brackets")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -502,16 +619,16 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            df=rename_airstrip,
-            columns=["airline", "attendant", "camp_lodge", "arrival_or_departure"],
-            **(params_dict.get("remove_air_brackets") or {}),
+            df=map_airstrip_op_columns,
+            columns=["airline", "arrival_departure", "attendant", "camp_lodge"],
+            **(params_dict.get("remove_airstrip_op_brackets") or {}),
         )
         .call()
     )
 
-    replace_camp_lodge_nulls = (
+    replace_airstrip_op_nulls = (
         replace_missing_with_label.validate()
-        .set_task_instance_id("replace_camp_lodge_nulls")
+        .set_task_instance_id("replace_airstrip_op_nulls")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -522,17 +639,17 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            df=remove_air_brackets,
+            df=remove_airstrip_op_brackets,
             columns=["camp_lodge"],
             label="other",
-            **(params_dict.get("replace_camp_lodge_nulls") or {}),
+            **(params_dict.get("replace_airstrip_op_nulls") or {}),
         )
         .call()
     )
 
-    convert_clients_int = (
+    convert_airstrip_op_ints = (
         convert_to_int.validate()
-        .set_task_instance_id("convert_clients_int")
+        .set_task_instance_id("convert_airstrip_op_ints")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -543,19 +660,19 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            df=replace_camp_lodge_nulls,
-            columns=["number_of_clients"],
+            df=replace_airstrip_op_nulls,
+            columns=["no_of_clients"],
             errors="coerce",
             fill_value=0,
             inplace=False,
-            **(params_dict.get("convert_clients_int") or {}),
+            **(params_dict.get("convert_airstrip_op_ints") or {}),
         )
         .call()
     )
 
-    lodge_scase = (
+    capitalize_camp_lodge = (
         capitalize_text.validate()
-        .set_task_instance_id("lodge_scase")
+        .set_task_instance_id("capitalize_camp_lodge")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -566,16 +683,16 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            df=convert_clients_int,
+            df=convert_airstrip_op_ints,
             column="camp_lodge",
-            **(params_dict.get("lodge_scase") or {}),
+            **(params_dict.get("capitalize_camp_lodge") or {}),
         )
         .call()
     )
 
-    airstrip_summary_table = (
+    airstrip_op_summary_table = (
         summarize_df.validate()
-        .set_task_instance_id("airstrip_summary_table")
+        .set_task_instance_id("airstrip_op_summary_table")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -586,48 +703,57 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            df=lodge_scase,
-            groupby_cols=["camp_lodge", "arrival_or_departure"],
+            df=capitalize_camp_lodge,
+            groupby_cols=["camp_lodge", "arrival_departure"],
             summary_params=[
                 {
-                    "display_name": "no_of_passengers",
+                    "display_name": "no_of_clients",
                     "aggregator": "sum",
-                    "column": "number_of_clients",
+                    "column": "no_of_clients",
                     "decimal_places": 0,
                 }
             ],
             reset_index=True,
-            **(params_dict.get("airstrip_summary_table") or {}),
+            **(params_dict.get("airstrip_op_summary_table") or {}),
         )
         .call()
     )
 
-    pivot_airstrip_table = (
+    pivot_airstrip_ops = (
         pivot_df.validate()
-        .set_task_instance_id("pivot_airstrip_table")
+        .set_task_instance_id("pivot_airstrip_ops")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
-            df=airstrip_summary_table,
+            df=airstrip_op_summary_table,
             index_col="camp_lodge",
-            columns_col="arrival_or_departure",
-            values_col="no_of_passengers",
+            columns_col="arrival_departure",
+            values_col="number_of_clients",
             reset_idx=True,
-            **(params_dict.get("pivot_airstrip_table") or {}),
+            **(params_dict.get("pivot_airstrip_ops") or {}),
         )
         .call()
     )
 
-    persist_airstrip_summary = (
+    convert_pivot_int = (
+        convert_to_int.validate()
+        .set_task_instance_id("convert_pivot_int")
+        .handle_errors()
+        .with_tracing()
+        .partial(
+            df=pivot_airstrip_ops,
+            columns=["arrival", "departure"],
+            errors="coerce",
+            fill_value=0,
+            inplace=False,
+            **(params_dict.get("convert_pivot_int") or {}),
+        )
+        .call()
+    )
+
+    persist_airstrip_operations = (
         persist_df.validate()
-        .set_task_instance_id("persist_airstrip_summary")
+        .set_task_instance_id("persist_airstrip_operations")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -640,16 +766,16 @@ def main(params: Params):
         .partial(
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filetype="csv",
-            df=pivot_airstrip_table,
-            filename="airstrip_arrivals_and_departure",
-            **(params_dict.get("persist_airstrip_summary") or {}),
+            df=convert_pivot_int,
+            filename="airstrip_operations_summary_table",
+            **(params_dict.get("persist_airstrip_operations") or {}),
         )
         .call()
     )
 
-    filter_am_events = (
-        filter_df.validate()
-        .set_task_instance_id("filter_am_events")
+    map_airstrip_maintenance = (
+        map_columns.validate()
+        .set_task_instance_id("map_airstrip_maintenance")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -660,106 +786,19 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            column_name="event_type",
-            op="equal",
-            value="airstrip_maintenance",
-            df=events_temporal,
-            reset_index=False,
-            **(params_dict.get("filter_am_events") or {}),
-        )
-        .call()
-    )
-
-    normalize_am_values = (
-        normalize_json_column.validate()
-        .set_task_instance_id("normalize_am_values")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            column="event_details",
-            df=filter_am_events,
-            skip_if_not_exists=True,
-            sort_columns=True,
-            **(params_dict.get("normalize_am_values") or {}),
-        )
-        .call()
-    )
-
-    rename_am = (
-        transform_columns.validate()
-        .set_task_instance_id("rename_am")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
+            df=drop_airstrip_maintenance_prefix,
             drop_columns=[],
-            retain_columns=[],
-            rename_columns={"event_details__maintenance_type": "activity"},
-            skip_missing_rename=True,
-            required_columns=["event_details__maintenance_type"],
-            df=normalize_am_values,
-            **(params_dict.get("rename_am") or {}),
+            retain_columns=["date", "Maintenance type"],
+            rename_columns={"Maintenance type": "maintenance_type"},
+            raise_if_not_found=False,
+            **(params_dict.get("map_airstrip_maintenance") or {}),
         )
         .call()
     )
 
-    filter_cols = (
-        filter_columns.validate()
-        .set_task_instance_id("filter_cols")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            df=rename_am,
-            columns=["date", "activity"],
-            exclude=[],
-            **(params_dict.get("filter_cols") or {}),
-        )
-        .call()
-    )
-
-    capitalize_activity_col = (
-        capitalize_text.validate()
-        .set_task_instance_id("capitalize_activity_col")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            df=filter_cols,
-            column="activity",
-            **(params_dict.get("capitalize_activity_col") or {}),
-        )
-        .call()
-    )
-
-    persist_air_maintenance = (
+    persist_airstrip_maintenance = (
         persist_df.validate()
-        .set_task_instance_id("persist_air_maintenance")
+        .set_task_instance_id("persist_airstrip_maintenance")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -772,9 +811,9 @@ def main(params: Params):
         .partial(
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filetype="csv",
-            df=capitalize_activity_col,
-            filename="airstrip_maintenance_table",
-            **(params_dict.get("persist_air_maintenance") or {}),
+            df=map_airstrip_maintenance,
+            filename="airstrip_maintenance_summary_table",
+            **(params_dict.get("persist_airstrip_maintenance") or {}),
         )
         .call()
     )
