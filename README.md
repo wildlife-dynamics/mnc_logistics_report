@@ -1,6 +1,6 @@
 # MNC Logistics Report — User Guide
 
-This guide walks you through configuring and running the MNC Logistics Report workflow, which processes balloon landing, airstrip operations, and airstrip maintenance events from EarthRanger to produce tabular CSV reports.
+This guide walks you through configuring and running the MNC Logistics Report workflow, which processes balloon landing, airstrip operations, airstrip maintenance, and airline complaint events from EarthRanger to produce tabular CSV reports.
 
 ---
 
@@ -8,9 +8,9 @@ This guide walks you through configuring and running the MNC Logistics Report wo
 
 The workflow delivers, for each run:
 
-- **balloon_landing_by_date.csv** — daily passenger counts grouped by balloon company and lodge
-- **airstrip_arrivals_and_departure.csv** — total client counts per camp/lodge pivoted by arrival and departure direction
-- **airstrip_maintenance_table.csv** — dated log of airstrip maintenance activities
+- **balloon_landing_summary_table.csv** — passenger records grouped by balloon company and lodge
+- **airstrip_operations_summary_table.csv** — total client counts per camp/lodge pivoted by arrival and departure direction
+- **airstrip_maintenance_summary_table.csv** — dated log of airstrip maintenance activities
 
 ---
 
@@ -18,7 +18,7 @@ The workflow delivers, for each run:
 
 Before running the workflow, ensure you have:
 
-- Access to an **EarthRanger** instance with `balloon_landing`, `airstrip_operations`, and `airstrip_maintenance` events recorded for the analysis period
+- Access to an **EarthRanger** instance with `balloon_landing`, `airstrip_operations`, `airstrip_maintenance`, and `airline_complaint` events recorded for the analysis period
 
 ---
 
@@ -98,11 +98,12 @@ Once all three sections are filled, click **Submit**.
 
 Once submitted, the runner will:
 
-1. Fetch all events for the analysis period from EarthRanger; extract the date from each event's timestamp; add a temporal index.
-2. Filter `balloon_landing` events; flatten event details; rename and clean fields; compute daily passenger totals per balloon company and lodge; save as `balloon_landing_by_date.csv`.
-3. Filter `airstrip_operations` events; flatten event details; rename and clean fields; compute total clients per camp/lodge; pivot by arrival/departure direction; save as `airstrip_arrivals_and_departure.csv`.
-4. Filter `airstrip_maintenance` events; flatten event details; rename maintenance type to activity; retain only date and activity columns; save as `airstrip_maintenance_table.csv`.
-5. Save all outputs to the directory specified by `ECOSCOPE_WORKFLOWS_RESULTS`.
+1. Fetch `balloon_landing`, `airstrip_operations`, `airstrip_maintenance`, and `airline_complaint` events for the analysis period from EarthRanger; extract the date from each event's timestamp; add a temporal index.
+2. Filter `balloon_landing` events; process and flatten event details (mapping field IDs to display titles); drop the `event_details__` prefix; retain and rename relevant columns (`balloon_company`, `where_are_clients_staying`, `no_of_passengers`); clean bracket characters; save as `balloon_landing_summary_table.csv`.
+3. Filter `airstrip_operations` events; process and flatten event details; drop the `event_details__` prefix; rename columns (`airline`, `arrival_departure`, `attendant`, `camp_lodge`, `no_of_clients`); clean bracket characters; fill missing camp/lodge values; convert client counts to integer; capitalize camp/lodge text; compute totals per camp/lodge by direction; pivot by arrival/departure; save as `airstrip_operations_summary_table.csv`.
+4. Filter `airstrip_maintenance` events; process and flatten event details; drop the `event_details__` prefix; retain date and maintenance type columns; save as `airstrip_maintenance_summary_table.csv`.
+5. Filter `airline_complaint` events; process and flatten event details; drop the `event_details__` prefix.
+6. Save all outputs to the directory specified by `ECOSCOPE_WORKFLOWS_RESULTS`.
 
 ---
 
@@ -112,6 +113,6 @@ All outputs are written to `$ECOSCOPE_WORKFLOWS_RESULTS/`.
 
 | File | Description |
 |------|-------------|
-| `balloon_landing_by_date.csv` | Daily passenger totals by balloon company and lodge |
-| `airstrip_arrivals_and_departure.csv` | Total clients per camp/lodge pivoted by arrival and departure |
-| `airstrip_maintenance_table.csv` | Dated log of airstrip maintenance activity types |
+| `balloon_landing_summary_table.csv` | Passenger records by balloon company and lodge |
+| `airstrip_operations_summary_table.csv` | Total clients per camp/lodge pivoted by arrival and departure |
+| `airstrip_maintenance_summary_table.csv` | Dated log of airstrip maintenance activity types |
