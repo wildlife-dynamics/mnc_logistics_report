@@ -271,6 +271,13 @@ def main(params: Params):
         .set_task_instance_id("process_balloon_details")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=filter_balloon_events,
             client=er_client_name,
@@ -308,6 +315,13 @@ def main(params: Params):
         .set_task_instance_id("drop_balloon_prefix")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=normalize_balloon_values,
             prefix="event_details__",
@@ -322,6 +336,13 @@ def main(params: Params):
         .set_task_instance_id("process_airstrip_details")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=filter_airstrip_operations,
             client=er_client_name,
@@ -359,6 +380,13 @@ def main(params: Params):
         .set_task_instance_id("drop_airstrip_op_prefix")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=normalize_airstrip_op_values,
             prefix="event_details__",
@@ -373,6 +401,13 @@ def main(params: Params):
         .set_task_instance_id("process_airstrip_maint_details")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=filter_airstrip_maintenance,
             client=er_client_name,
@@ -410,6 +445,13 @@ def main(params: Params):
         .set_task_instance_id("drop_airstrip_maintenance_prefix")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=normalize_airstrip_maint_vals,
             prefix="event_details__",
@@ -424,6 +466,13 @@ def main(params: Params):
         .set_task_instance_id("process_airline_comp_details")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=filter_airline_complaints,
             client=er_client_name,
@@ -698,6 +747,13 @@ def main(params: Params):
         .set_task_instance_id("pivot_airstrip_ops")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=airstrip_op_summary_table,
             index_col="camp_lodge",
@@ -714,6 +770,13 @@ def main(params: Params):
         .set_task_instance_id("convert_pivot_int")
         .handle_errors()
         .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
         .partial(
             df=pivot_airstrip_ops,
             columns=["arrival", "departure"],

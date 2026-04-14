@@ -317,6 +317,13 @@ def main(params: Params):
             .set_task_instance_id("process_balloon_details")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("filter_balloon_events"),
@@ -354,6 +361,13 @@ def main(params: Params):
             .set_task_instance_id("drop_balloon_prefix")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("normalize_balloon_values"),
@@ -368,6 +382,13 @@ def main(params: Params):
             .set_task_instance_id("process_airstrip_details")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("filter_airstrip_operations"),
@@ -405,6 +426,13 @@ def main(params: Params):
             .set_task_instance_id("drop_airstrip_op_prefix")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("normalize_airstrip_op_values"),
@@ -419,6 +447,13 @@ def main(params: Params):
             .set_task_instance_id("process_airstrip_maint_details")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("filter_airstrip_maintenance"),
@@ -456,6 +491,13 @@ def main(params: Params):
             .set_task_instance_id("drop_airstrip_maintenance_prefix")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("normalize_airstrip_maint_vals"),
@@ -470,6 +512,13 @@ def main(params: Params):
             .set_task_instance_id("process_airline_comp_details")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("filter_airline_complaints"),
@@ -756,6 +805,13 @@ def main(params: Params):
             .set_task_instance_id("pivot_airstrip_ops")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("airstrip_op_summary_table"),
@@ -772,6 +828,13 @@ def main(params: Params):
             .set_task_instance_id("convert_pivot_int")
             .handle_errors()
             .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("pivot_airstrip_ops"),
