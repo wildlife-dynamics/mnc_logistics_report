@@ -468,10 +468,9 @@ story += [
     ),
     note("The airline complaint branch currently ends at the drop_column_prefix "
          "step. Column selection, renaming, and persistence steps are not yet "
-         "defined in the spec. The branch skip conditions "
-         "(any_is_empty_df, any_dependency_skipped) are applied only at the "
-         "drop_column_prefix step; the filter and process steps do not carry "
-         "skipif blocks."),
+         "defined in the spec. All four steps in this branch carry explicit "
+         "skipif conditions (any_is_empty_df, any_dependency_skipped), "
+         "consistent with the rest of the workflow."),
     PageBreak(),
 ]
 
