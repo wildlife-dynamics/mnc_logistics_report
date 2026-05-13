@@ -26,7 +26,19 @@ from ecoscope_workflows_ext_custom.tasks.io import (
     process_events_details as process_events_details,
 )
 from ecoscope_workflows_ext_custom.tasks.transformation import (
+    coerce_columns_to_int as coerce_columns_to_int,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
     drop_column_prefix as drop_column_prefix,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    format_text_column as format_text_column,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    pivot_dataframe as pivot_dataframe,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    replace_empty_strings_in_columns as replace_empty_strings_in_columns,
 )
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import summarize_df as summarize_df
 from ecoscope_workflows_ext_ecoscope.tasks.io import get_events as get_events
@@ -34,14 +46,8 @@ from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df as persist_df
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     normalize_json_column as normalize_json_column,
 )
-from ecoscope_workflows_ext_mnc.tasks import capitalize_text as capitalize_text
-from ecoscope_workflows_ext_mnc.tasks import convert_to_int as convert_to_int
-from ecoscope_workflows_ext_mnc.tasks import pivot_df as pivot_df
 from ecoscope_workflows_ext_mnc.tasks import (
     remove_brackets_from_column as remove_brackets_from_column,
-)
-from ecoscope_workflows_ext_mnc.tasks import (
-    replace_missing_with_label as replace_missing_with_label,
 )
 
 from ..params import Params
@@ -701,7 +707,7 @@ def main(params: Params):
             method="call",
         ),
         "replace_airstrip_op_nulls": Node(
-            async_task=replace_missing_with_label.validate()
+            async_task=replace_empty_strings_in_columns.validate()
             .set_task_instance_id("replace_airstrip_op_nulls")
             .handle_errors()
             .with_tracing()
@@ -718,13 +724,15 @@ def main(params: Params):
                 "columns": [
                     "camp_lodge",
                 ],
-                "label": "other",
+                "replacement": "Other",
+                "strip_whitespace": True,
+                "missing": "ignore",
             }
             | (params_dict.get("replace_airstrip_op_nulls") or {}),
             method="call",
         ),
         "convert_airstrip_op_ints": Node(
-            async_task=convert_to_int.validate()
+            async_task=coerce_columns_to_int.validate()
             .set_task_instance_id("convert_airstrip_op_ints")
             .handle_errors()
             .with_tracing()
@@ -743,13 +751,14 @@ def main(params: Params):
                 ],
                 "errors": "coerce",
                 "fill_value": 0,
-                "inplace": False,
+                "missing": "ignore",
+                "nullable": True,
             }
             | (params_dict.get("convert_airstrip_op_ints") or {}),
             method="call",
         ),
         "capitalize_camp_lodge": Node(
-            async_task=capitalize_text.validate()
+            async_task=format_text_column.validate()
             .set_task_instance_id("capitalize_camp_lodge")
             .handle_errors()
             .with_tracing()
@@ -764,6 +773,7 @@ def main(params: Params):
             partial={
                 "df": DependsOn("convert_airstrip_op_ints"),
                 "column": "camp_lodge",
+                "method": "capitalize",
             }
             | (params_dict.get("capitalize_camp_lodge") or {}),
             method="call",
@@ -801,7 +811,7 @@ def main(params: Params):
             method="call",
         ),
         "pivot_airstrip_ops": Node(
-            async_task=pivot_df.validate()
+            async_task=pivot_dataframe.validate()
             .set_task_instance_id("pivot_airstrip_ops")
             .handle_errors()
             .with_tracing()
@@ -815,16 +825,20 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "df": DependsOn("airstrip_op_summary_table"),
-                "index_col": "camp_lodge",
-                "columns_col": "arrival_departure",
-                "values_col": "no_of_clients",
-                "reset_idx": True,
+                "index": "camp_lodge",
+                "columns": [
+                    "arrival_departure",
+                ],
+                "values": [
+                    "no_of_clients",
+                ],
+                "fill_value": 0,
             }
             | (params_dict.get("pivot_airstrip_ops") or {}),
             method="call",
         ),
         "convert_pivot_int": Node(
-            async_task=convert_to_int.validate()
+            async_task=coerce_columns_to_int.validate()
             .set_task_instance_id("convert_pivot_int")
             .handle_errors()
             .with_tracing()
@@ -844,7 +858,8 @@ def main(params: Params):
                 ],
                 "errors": "coerce",
                 "fill_value": 0,
-                "inplace": False,
+                "missing": "ignore",
+                "nullable": True,
             }
             | (params_dict.get("convert_pivot_int") or {}),
             method="call",

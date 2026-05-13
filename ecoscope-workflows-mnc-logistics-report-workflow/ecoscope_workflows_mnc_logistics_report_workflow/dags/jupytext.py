@@ -35,7 +35,19 @@ from ecoscope_workflows_ext_custom.tasks.io import (
     process_events_details as process_events_details,
 )
 from ecoscope_workflows_ext_custom.tasks.transformation import (
+    coerce_columns_to_int as coerce_columns_to_int,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
     drop_column_prefix as drop_column_prefix,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    format_text_column as format_text_column,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    pivot_dataframe as pivot_dataframe,
+)
+from ecoscope_workflows_ext_custom.tasks.transformation import (
+    replace_empty_strings_in_columns as replace_empty_strings_in_columns,
 )
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import summarize_df as summarize_df
 from ecoscope_workflows_ext_ecoscope.tasks.io import get_events as get_events
@@ -43,14 +55,8 @@ from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df as persist_df
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     normalize_json_column as normalize_json_column,
 )
-from ecoscope_workflows_ext_mnc.tasks import capitalize_text as capitalize_text
-from ecoscope_workflows_ext_mnc.tasks import convert_to_int as convert_to_int
-from ecoscope_workflows_ext_mnc.tasks import pivot_df as pivot_df
 from ecoscope_workflows_ext_mnc.tasks import (
     remove_brackets_from_column as remove_brackets_from_column,
-)
-from ecoscope_workflows_ext_mnc.tasks import (
-    replace_missing_with_label as replace_missing_with_label,
 )
 
 # %% [markdown]
@@ -1013,7 +1019,7 @@ replace_airstrip_op_nulls_params = dict()
 
 
 replace_airstrip_op_nulls = (
-    replace_missing_with_label.set_task_instance_id("replace_airstrip_op_nulls")
+    replace_empty_strings_in_columns.set_task_instance_id("replace_airstrip_op_nulls")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -1026,7 +1032,9 @@ replace_airstrip_op_nulls = (
     .partial(
         df=remove_airstrip_op_brackets,
         columns=["camp_lodge"],
-        label="other",
+        replacement="Other",
+        strip_whitespace=True,
+        missing="ignore",
         **replace_airstrip_op_nulls_params,
     )
     .call()
@@ -1046,7 +1054,7 @@ convert_airstrip_op_ints_params = dict()
 
 
 convert_airstrip_op_ints = (
-    convert_to_int.set_task_instance_id("convert_airstrip_op_ints")
+    coerce_columns_to_int.set_task_instance_id("convert_airstrip_op_ints")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -1061,7 +1069,8 @@ convert_airstrip_op_ints = (
         columns=["no_of_clients"],
         errors="coerce",
         fill_value=0,
-        inplace=False,
+        missing="ignore",
+        nullable=True,
         **convert_airstrip_op_ints_params,
     )
     .call()
@@ -1081,7 +1090,7 @@ capitalize_camp_lodge_params = dict()
 
 
 capitalize_camp_lodge = (
-    capitalize_text.set_task_instance_id("capitalize_camp_lodge")
+    format_text_column.set_task_instance_id("capitalize_camp_lodge")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -1092,7 +1101,10 @@ capitalize_camp_lodge = (
         unpack_depth=1,
     )
     .partial(
-        df=convert_airstrip_op_ints, column="camp_lodge", **capitalize_camp_lodge_params
+        df=convert_airstrip_op_ints,
+        column="camp_lodge",
+        method="capitalize",
+        **capitalize_camp_lodge_params,
     )
     .call()
 )
@@ -1152,7 +1164,7 @@ pivot_airstrip_ops_params = dict()
 
 
 pivot_airstrip_ops = (
-    pivot_df.set_task_instance_id("pivot_airstrip_ops")
+    pivot_dataframe.set_task_instance_id("pivot_airstrip_ops")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -1164,10 +1176,10 @@ pivot_airstrip_ops = (
     )
     .partial(
         df=airstrip_op_summary_table,
-        index_col="camp_lodge",
-        columns_col="arrival_departure",
-        values_col="no_of_clients",
-        reset_idx=True,
+        index="camp_lodge",
+        columns=["arrival_departure"],
+        values=["no_of_clients"],
+        fill_value=0,
         **pivot_airstrip_ops_params,
     )
     .call()
@@ -1187,7 +1199,7 @@ convert_pivot_int_params = dict()
 
 
 convert_pivot_int = (
-    convert_to_int.set_task_instance_id("convert_pivot_int")
+    coerce_columns_to_int.set_task_instance_id("convert_pivot_int")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -1202,7 +1214,8 @@ convert_pivot_int = (
         columns=["arrival", "departure"],
         errors="coerce",
         fill_value=0,
-        inplace=False,
+        missing="ignore",
+        nullable=True,
         **convert_pivot_int_params,
     )
     .call()

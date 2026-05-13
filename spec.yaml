@@ -9,15 +9,23 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.43.*"
+    version: "0.0.49.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.18.*"
+    version: "0.0.20.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-mep
+    version: "0.0.19.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-big-life
+    version: "0.0.11.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc
-    version: "0.0.8.*"
+    version: "0.0.10.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
 workflow:
@@ -397,7 +405,7 @@ workflow:
 
   - name: Replace missing values in camp_lodge column with other
     id: replace_airstrip_op_nulls
-    task: replace_missing_with_label
+    task: replace_empty_strings_in_columns #replace_missing_with_label
     skipif:
       conditions:
         - any_is_empty_df
@@ -406,11 +414,13 @@ workflow:
       df: ${{ workflow.remove_airstrip_op_brackets.return }}
       columns: 
         - camp_lodge
-      label: other
+      replacement: Other 
+      strip_whitespace: true 
+      missing: ignore
 
   - name: Convert columns to integer 
     id: convert_airstrip_op_ints
-    task: convert_to_int
+    task: coerce_columns_to_int  #convert_to_int
     skipif:
       conditions:
         - any_is_empty_df
@@ -421,11 +431,12 @@ workflow:
         - no_of_clients
       errors: coerce
       fill_value: 0
-      inplace: false
+      missing: ignore 
+      nullable: true 
   
   - name: Capitalize text in camp_lodge column 
     id: capitalize_camp_lodge
-    task: capitalize_text
+    task: format_text_column #capitalize_text
     skipif:
       conditions:
         - any_is_empty_df
@@ -433,6 +444,7 @@ workflow:
     partial:
       df: ${{ workflow.convert_airstrip_op_ints.return }}
       column: camp_lodge
+      method: capitalize
 
   - name: Airstrip operation events summary table
     id: airstrip_op_summary_table 
@@ -455,21 +467,23 @@ workflow:
 
   - name: Pivot airstrip operations summary table 
     id: pivot_airstrip_ops
-    task: pivot_df 
+    task: pivot_dataframe #pivot_df 
     skipif:
       conditions:
         - any_is_empty_df
         - any_dependency_skipped
     partial: 
       df: ${{ workflow.airstrip_op_summary_table.return }}
-      index_col: camp_lodge
-      columns_col: arrival_departure 
-      values_col: no_of_clients
-      reset_idx: true 
+      index: camp_lodge
+      columns: 
+        - arrival_departure 
+      values: 
+        - no_of_clients
+      fill_value: 0
   
   - name: Convert airstrip pivot table values to int 
     id: convert_pivot_int 
-    task: convert_to_int 
+    task: coerce_columns_to_int #convert_to_int 
     skipif:
       conditions:
         - any_is_empty_df
@@ -481,8 +495,9 @@ workflow:
         - departure 
       errors: coerce 
       fill_value: 0 
-      inplace: false 
-  
+      missing: ignore 
+      nullable: true 
+      
   - name: Persist airstrip operations summary table
     id: persist_airstrip_operations 
     task: persist_df 
