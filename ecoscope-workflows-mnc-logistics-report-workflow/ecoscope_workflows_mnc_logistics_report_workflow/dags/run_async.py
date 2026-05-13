@@ -725,7 +725,7 @@ def main(params: Params):
                     "camp_lodge",
                 ],
                 "replacement": "Other",
-                "strip_whitespace": True,
+                "strip_whitespace": False,
                 "missing": "ignore",
             }
             | (params_dict.get("replace_airstrip_op_nulls") or {}),

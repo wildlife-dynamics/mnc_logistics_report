@@ -1033,7 +1033,7 @@ replace_airstrip_op_nulls = (
         df=remove_airstrip_op_brackets,
         columns=["camp_lodge"],
         replacement="Other",
-        strip_whitespace=True,
+        strip_whitespace=False,
         missing="ignore",
         **replace_airstrip_op_nulls_params,
     )
@@ -1292,7 +1292,7 @@ map_airstrip_maintenance = (
 
 
 # %% [markdown]
-# ## Persist airstrip maintenace summary table
+# ## Persist airstrip maintenance summary table
 
 # %%
 # parameters

@@ -415,7 +415,7 @@ workflow:
       columns: 
         - camp_lodge
       replacement: Other 
-      strip_whitespace: true 
+      strip_whitespace: false 
       missing: ignore
 
   - name: Convert columns to integer 
@@ -530,7 +530,7 @@ workflow:
         }
       raise_if_not_found: false
 
-  - name: Persist airstrip maintenace summary table
+  - name: Persist airstrip maintenance summary table
     id: persist_airstrip_maintenance
     task: persist_df 
     skipif:
