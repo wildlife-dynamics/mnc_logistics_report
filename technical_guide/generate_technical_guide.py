@@ -123,7 +123,7 @@ story += [
     p("Balloon landings, airstrip operations, airstrip maintenance, and airline complaints reporting", SUBTITLE),
     sp(4),
     p(f"Generated {date.today().strftime('%B %d, %Y')}", META),
-    p("Workflow id: <b>mnc_logistics_report</b>", META),
+    p("Workflow id: <b>logistics_report</b>", META),
     PageBreak(),
 ]
 
@@ -133,13 +133,15 @@ story += [
 story += [
     h1("1. Overview"),
     hr(),
-    p("The <b>mnc_logistics_report</b> workflow fetches events from "
-      "EarthRanger for a specified time window — specifically "
-      "<b>balloon_landing</b>, <b>airstrip_operations</b>, "
+    p("The <b>logistics_report</b> workflow (repository: mnc_logistics_report) "
+      "fetches events from EarthRanger for a specified time window — "
+      "specifically <b>balloon_landing</b>, <b>airstrip_operations</b>, "
       "<b>airstrip_maintenance</b>, and <b>airline_complaint</b> event types — "
       "and routes them into four independent logistics reporting branches. "
       "Each branch processes and flattens event details, cleans and renames "
-      "fields, and persists its data as a CSV table."),
+      "fields, and persists its data as a CSV table. The three published "
+      "branches additionally render an interactive HTML table widget that is "
+      "attached to the workflow's dashboard."),
     sp(4),
     p("The workflow delivers:"),
     bullet("<b>balloon_landing_summary_table.csv</b> — passenger records per "
@@ -148,6 +150,8 @@ story += [
            "pivoted by camp/lodge and direction (arrival / departure)"),
     bullet("<b>airstrip_maintenance_summary_table.csv</b> — dated log of airstrip "
            "maintenance activity types"),
+    bullet("<b>MNC Logistics Dashboard</b> — a dashboard populated with one "
+           "sortable/filterable table widget per summary table above"),
     sp(6),
     h2("Output summary"),
     make_table(
@@ -155,13 +159,14 @@ story += [
             ["Output file", "Source event type", "Description"],
             ["balloon_landing_summary_table.csv",
              "balloon_landing",
-             "Passenger records: date, balloon company, lodge, number of passengers"],
+             "Passenger records: Date, Balloon Company, Where Are Clients "
+             "Staying, No Of Passengers"],
             ["airstrip_operations_summary_table.csv",
              "airstrip_operations",
-             "Pivoted summary: camp/lodge × arrival/departure, total clients"],
+             "Pivoted summary: Camp Lodge × Arrival/Departure, total clients"],
             ["airstrip_maintenance_summary_table.csv",
              "airstrip_maintenance",
-             "Dated activity log: date, maintenance type"],
+             "Dated activity log: Date, Maintenance Type"],
         ],
         [5.5*cm, 4*cm, W - 9.5*cm],
     ),
@@ -178,14 +183,23 @@ story += [
     make_table(
         [
             ["Package", "Version", "Channel"],
-            ["ecoscope-workflows-core",        "0.22.18.*", "ecoscope-workflows"],
-            ["ecoscope-workflows-ext-ecoscope","0.22.18.*", "ecoscope-workflows"],
-            ["ecoscope-workflows-ext-custom",  "0.0.43.*",  "ecoscope-workflows-custom"],
-            ["ecoscope-workflows-ext-ste",     "0.0.18.*",  "ecoscope-workflows-custom"],
-            ["ecoscope-workflows-ext-mnc",     "0.0.8.*",   "ecoscope-workflows-custom"],
+            ["ecoscope-platform",              ">=2.15.0, <2.16.0", "ecoscope-workflows"],
+            ["ecoscope-workflows-ext-custom",  "0.1.0rc14.*", "ecoscope-workflows-custom"],
+            ["ecoscope-workflows-ext-ste",     "0.0.0rc1.*",  "ecoscope-workflows-custom"],
+            ["ecoscope-workflows-ext-mnc",     "1.0.0.*",     "ecoscope-workflows-custom"],
+            ["pydeck",                         "0.9.2",       "conda-forge"],
+            ["opentelemetry-sdk",              ">=1.20.0, <2.0.0", "conda-forge"],
         ],
-        [6.5*cm, 3*cm, W - 9.5*cm],
+        [6.5*cm, 3.5*cm, W - 10*cm],
     ),
+    note("<b>ecoscope-platform</b> replaces the previously separate "
+         "<b>ecoscope-workflows-core</b> and <b>ecoscope-workflows-ext-ecoscope</b> "
+         "packages. The <b>ecoscope-workflows-ext-mep</b> and "
+         "<b>ecoscope-workflows-ext-big-life</b> packages, previously listed, are "
+         "no longer required by this workflow. <b>opentelemetry-sdk</b> enables "
+         "distributed tracing for the compiled workflow's task graph; "
+         "<b>pydeck</b> is a platform-level requirement pulled in alongside "
+         "ecoscope-platform."),
     sp(6),
     h2("2.2  Connection"),
     make_table(
@@ -234,12 +248,14 @@ story += [
             ["include_updates",         "false"],
             ["include_related_events",  "false"],
             ["include_display_values",  "false"],
+            ["force_point_geometry",    "true"],
         ],
         [5*cm, W - 5*cm],
     ),
     note("Only the four event types required by this workflow are fetched at "
          "retrieval time. Downstream filter_df steps then isolate each type "
-         "into its own branch."),
+         "into its own branch. force_point_geometry: true normalises all "
+         "event geometries to points before they reach the branch pipelines."),
     sp(6),
     h2("3.2  Date extraction and temporal indexing"),
     make_table(
@@ -315,17 +331,34 @@ story += [
          "raise_if_not_found: false means the task skips gracefully if any "
          "of the named columns are absent."),
     sp(6),
-    h2("4.3  Cleaning and persistence"),
+    h2("4.3  Cleaning, display renaming, persistence, and widget"),
     make_table(
         [
             ["Step", "Task", "Detail"],
-            ["1", "remove_brackets_from_column",
+            ["1", "ecoscope_workflows_ext_mnc.tasks.transformation.remove_brackets_from_column",
              "Strip bracket characters from <b>balloon_company</b> and "
              "<b>where_are_clients_staying</b> columns."],
-            ["2", "persist_df",
-             "Save as <b>balloon_landing_summary_table.csv</b> (filetype: csv)."],
+            ["2", "map_columns",
+             "Rename columns to display-friendly headers: date→Date, "
+             "balloon_company→Balloon Company, "
+             "where_are_clients_staying→Where Are Clients Staying, "
+             "no_of_passengers→No Of Passengers."],
+            ["3", "persist_df",
+             "Save as <b>balloon_landing_summary_table.csv</b> (filetype: csv), "
+             "using the display-renamed table."],
+            ["4", "draw_table",
+             "Render the display-renamed table as an HTML widget "
+             "(widget_id: “Balloon Landing Summary”; sorting and filtering "
+             "enabled; download disabled)."],
+            ["5", "persist_text",
+             "Save the rendered HTML as a text file "
+             "(filename_suffix: balloon_landing_summary_table.html)."],
+            ["6", "create_table_widget_single_view",
+             "Wrap the persisted HTML into a dashboard widget titled "
+             "“Balloon Landing Summary”, referenced by the dashboard's "
+             "widgets list."],
         ],
-        [1.2*cm, 4.5*cm, W - 5.7*cm],
+        [1.2*cm, 6*cm, W - 7.2*cm],
     ),
     PageBreak(),
 ]
@@ -359,24 +392,24 @@ story += [
     ),
     sp(6),
     h2("5.3  Cleaning"),
+    p("The previous null-replacement (replace_empty_strings_in_columns) and "
+      "camp_lodge capitalisation (format_text_column) steps have been removed "
+      "from this branch; cleaning now goes directly from bracket-stripping to "
+      "integer coercion."),
     make_table(
         [
             ["Step", "Task", "Detail"],
-            ["1", "remove_brackets_from_column",
+            ["1", "ecoscope_workflows_ext_mnc.tasks.transformation.remove_brackets_from_column",
              "Strip bracket characters from <b>airline</b>, <b>arrival_departure</b>, "
              "<b>attendant</b>, and <b>camp_lodge</b>."],
-            ["2", "replace_missing_with_label",
-             "Replace null values in <b>camp_lodge</b> with the label <b>'other'</b>."],
-            ["3", "convert_to_int",
+            ["2", "ecoscope_workflows_ext_mnc.tasks.transformation.convert_columns_to_int",
              "Cast <b>no_of_clients</b> to integer "
-             "(errors: coerce, fill_value: 0, inplace: false)."],
-            ["4", "capitalize_text",
-             "Capitalise the <b>camp_lodge</b> column (sentence case)."],
+             "(errors: coerce, fill_value: 0)."],
         ],
-        [1.2*cm, 4.5*cm, W - 5.7*cm],
+        [1.2*cm, 6*cm, W - 7.2*cm],
     ),
     sp(6),
-    h2("5.4  Summary, pivot, and persistence"),
+    h2("5.4  Summary, pivot, display renaming, persistence, and widget"),
     make_table(
         [
             ["Step", "Task", "Detail"],
@@ -384,18 +417,34 @@ story += [
              "Group by <b>[camp_lodge, arrival_departure]</b> and compute "
              "<b>sum(no_of_clients)</b> (display_name: no_of_clients, "
              "decimal_places: 0). reset_index: true."],
-            ["2", "pivot_df",
-             "Pivot the summary table: index_col: <b>camp_lodge</b>, "
-             "columns_col: <b>arrival_departure</b>, "
-             "values_col: <b>no_of_clients</b>. reset_idx: true. "
+            ["2", "pivot_dataframe",
+             "Pivot the summary table: index: <b>camp_lodge</b>, "
+             "columns: <b>arrival_departure</b>, "
+             "values: <b>no_of_clients</b>, fill_value: 0. "
              "Produces one column per direction value (arrival, departure)."],
-            ["3", "convert_to_int",
+            ["3", "ecoscope_workflows_ext_mnc.tasks.transformation.convert_columns_to_int",
              "Cast pivot columns <b>arrival</b> and <b>departure</b> to integer "
-             "(errors: coerce, fill_value: 0, inplace: false)."],
-            ["4", "persist_df",
-             "Save as <b>airstrip_operations_summary_table.csv</b> (filetype: csv)."],
+             "(errors: coerce, fill_value: 0)."],
+            ["4", "map_columns",
+             "Rename columns to display-friendly headers: camp_lodge→Camp "
+             "Lodge, no_of_clients_Arrival→Arrival, "
+             "no_of_clients_Departure→Departure."],
+            ["5", "persist_df",
+             "Save as <b>airstrip_operations_summary_table.csv</b> (filetype: csv), "
+             "using the display-renamed table."],
+            ["6", "draw_table",
+             "Render the display-renamed table as an HTML widget "
+             "(widget_id: “Airstrip Operations Summary”; sorting and filtering "
+             "enabled; download disabled)."],
+            ["7", "persist_text",
+             "Save the rendered HTML as a text file "
+             "(filename_suffix: airstrip_operations_summary_table.html)."],
+            ["8", "create_table_widget_single_view",
+             "Wrap the persisted HTML into a dashboard widget titled "
+             "“Airstrip Operations Summary”, referenced by the dashboard's "
+             "widgets list."],
         ],
-        [1.2*cm, 4.5*cm, W - 5.7*cm],
+        [1.2*cm, 6*cm, W - 7.2*cm],
     ),
     PageBreak(),
 ]
@@ -425,14 +474,29 @@ story += [
     ),
     note("All other event detail columns are discarded at this step."),
     sp(6),
-    h2("6.3  Persistence"),
+    h2("6.3  Display renaming, persistence, and widget"),
     make_table(
         [
             ["Step", "Task", "Detail"],
-            ["1", "persist_df",
-             "Save as <b>airstrip_maintenance_summary_table.csv</b> (filetype: csv)."],
+            ["1", "map_columns",
+             "Rename columns to display-friendly headers: date→Date, "
+             "maintenance_type→Maintenance Type."],
+            ["2", "persist_df",
+             "Save as <b>airstrip_maintenance_summary_table.csv</b> (filetype: csv), "
+             "using the display-renamed table."],
+            ["3", "draw_table",
+             "Render the display-renamed table as an HTML widget "
+             "(widget_id: “Airstrip Maintenance Summary”; sorting and filtering "
+             "enabled; download disabled)."],
+            ["4", "persist_text",
+             "Save the rendered HTML as a text file "
+             "(filename_suffix: airstrip_maintenance_summary_table.html)."],
+            ["5", "create_table_widget_single_view",
+             "Wrap the persisted HTML into a dashboard widget titled "
+             "“Airstrip Maintenance Summary”, referenced by the dashboard's "
+             "widgets list."],
         ],
-        [1.2*cm, 4.5*cm, W - 5.7*cm],
+        [1.2*cm, 6*cm, W - 7.2*cm],
     ),
     PageBreak(),
 ]
@@ -467,10 +531,10 @@ story += [
         [1.2*cm, 4.5*cm, W - 5.7*cm],
     ),
     note("The airline complaint branch currently ends at the drop_column_prefix "
-         "step. Column selection, renaming, and persistence steps are not yet "
-         "defined in the spec. All four steps in this branch carry explicit "
-         "skipif conditions (any_is_empty_df, any_dependency_skipped), "
-         "consistent with the rest of the workflow."),
+         "step. Column selection, renaming, persistence, and widget steps are "
+         "not yet defined in the spec. Like every other task in the workflow, "
+         "all four steps in this branch inherit the global skipif default "
+         "(any_is_empty_df, any_dependency_skipped) — see Section 9.1."),
     PageBreak(),
 ]
 
@@ -486,19 +550,28 @@ story += [
             ["File", "Branch", "Columns", "Description"],
             ["balloon_landing_summary_table.csv",
              "Balloon landings",
-             "date, balloon_company, where_are_clients_staying, no_of_passengers",
+             "Date, Balloon Company, Where Are Clients Staying, No Of Passengers",
              "Passenger records by balloon company and lodge"],
             ["airstrip_operations_summary_table.csv",
              "Airstrip operations",
-             "camp_lodge, arrival, departure (pivoted)",
+             "Camp Lodge, Arrival, Departure (pivoted)",
              "Total clients per camp/lodge pivoted by direction"],
             ["airstrip_maintenance_summary_table.csv",
              "Airstrip maintenance",
-             "date, maintenance_type",
+             "Date, Maintenance Type",
              "Dated log of airstrip maintenance activity types"],
         ],
         [5*cm, 3.5*cm, 4*cm, W - 12.5*cm],
     ),
+    sp(6),
+    h2("8.1  Dashboard widget HTML"),
+    p("Each of the three CSV outputs above also has a matching rendered "
+      "HTML table persisted (via draw_table → persist_text) as "
+      "<b>&lt;filename&gt;_summary_table.html</b>. These HTML files are the "
+      "data source referenced by the corresponding "
+      "create_table_widget_single_view widget in the MNC Logistics Dashboard "
+      "— they are not intended to be opened directly, but are addressed by "
+      "the dashboard's widgets list."),
     PageBreak(),
 ]
 
@@ -508,10 +581,11 @@ story += [
 story += [
     h1("9. Workflow Execution Logic"),
     hr(),
-    h2("9.1  Per-task skip conditions"),
-    p("This workflow does <b>not</b> use a global <b>task-instance-defaults</b> "
-      "block. Instead, every task from event retrieval onwards carries its own "
-      "explicit skipif block:"),
+    h2("9.1  Global skip conditions"),
+    p("This workflow now defines a single <b>task-instance-defaults</b> block "
+      "at the top of the spec, which applies the same skipif conditions to "
+      "every task automatically. Individual tasks no longer repeat their own "
+      "skipif block:"),
     make_table(
         [
             ["Condition", "Behaviour"],
@@ -520,25 +594,31 @@ story += [
         ],
         [5*cm, W - 5*cm],
     ),
-    note("Because skip conditions are per-task rather than global, each of "
-         "the four branches propagates skips independently. If balloon_landing "
-         "events are absent, only that branch is skipped; the other branches "
-         "continue normally."),
+    note("This is a behaviour-preserving simplification over the previous "
+         "spec, which declared the identical skipif block on every task "
+         "individually. Because the conditions are unchanged, each of the "
+         "branches still propagates skips independently — if balloon_landing "
+         "events are absent, only that branch (and its widget) is skipped; "
+         "the other branches continue normally."),
     sp(6),
-    h2("9.2  Four independent branches"),
+    h2("9.2  Four branches, three published to the dashboard"),
     p("After the shared ingestion pipeline produces <b>events_temporal</b>, "
-      "the workflow splits into four fully independent branches. Each branch "
+      "the workflow splits into four independent branches. Each branch "
       "reads from events_temporal and produces its own output with no "
       "cross-branch dependencies:"),
     make_table(
         [
-            ["Branch", "Filter value", "Output"],
-            ["Balloon landings",    "balloon_landing",    "balloon_landing_summary_table.csv"],
-            ["Airstrip operations", "airstrip_operations","airstrip_operations_summary_table.csv"],
-            ["Airstrip maintenance","airstrip_maintenance","airstrip_maintenance_summary_table.csv"],
-            ["Airline complaints",  "airline_complaint",  "(normalised; no persist step yet)"],
+            ["Branch", "Filter value", "Output", "Dashboard widget"],
+            ["Balloon landings",    "balloon_landing",     "balloon_landing_summary_table.csv",
+             "Balloon Landing Summary"],
+            ["Airstrip operations", "airstrip_operations", "airstrip_operations_summary_table.csv",
+             "Airstrip Operations Summary"],
+            ["Airstrip maintenance","airstrip_maintenance","airstrip_maintenance_summary_table.csv",
+             "Airstrip Maintenance Summary"],
+            ["Airline complaints",  "airline_complaint",   "(normalised; no persist step yet)",
+             "— (none)"],
         ],
-        [4*cm, 4*cm, W - 8*cm],
+        [3.5*cm, 3.2*cm, 4.5*cm, W - 11.2*cm],
     ),
     sp(6),
     h2("9.3  No mapvalues or fan-out"),
@@ -546,16 +626,21 @@ story += [
       "<b>mapvalues</b>, <b>split_groups</b>, or <b>zip_groupbykey</b> — "
       "every task runs exactly once."),
     sp(6),
-    h2("9.4  No chart or map generation"),
-    p("This is a pure data-extraction and tabulation workflow. It produces "
-      "no charts, maps, or HTML outputs — only CSV tables. "
-      "There are no html_to_png conversions, draw_map calls, "
-      "or Likert/pie/bar chart tasks."),
+    h2("9.4  Table widgets, but no charts or maps"),
+    p("This workflow produces no charts, maps, or map-based widgets — there "
+      "are no html_to_png conversions, draw_map calls, or Likert/pie/bar "
+      "chart tasks. It does, however, render three interactive HTML "
+      "<b>table</b> widgets via draw_table (one per published branch), which "
+      "are persisted as HTML text via persist_text and wrapped as dashboard "
+      "widgets via create_table_widget_single_view."),
     sp(6),
     h2("9.5  Dashboard"),
-    p("The workflow concludes with <b>gather_dashboard</b> which packages "
-      "workflow details, time range, and groupers. The <b>widgets</b> list "
-      "is empty — no single-value or map widgets are configured."),
+    p("The workflow concludes with <b>gather_dashboard</b> (id: "
+      "logistics_dashboard, name: “MNC Logistics Dashboard”), which packages "
+      "workflow details, time range, groupers, and the <b>widgets</b> list. "
+      "The widgets list now references the three table widgets produced by "
+      "the balloon landing, airstrip operations, and airstrip maintenance "
+      "branches — previously this list was empty."),
     PageBreak(),
 ]
 
@@ -568,11 +653,12 @@ story += [
     make_table(
         [
             ["Package", "Version pinned in spec.yaml"],
-            ["ecoscope-workflows-core",        "0.22.18.*"],
-            ["ecoscope-workflows-ext-ecoscope","0.22.18.*"],
-            ["ecoscope-workflows-ext-custom",  "0.0.43.*"],
-            ["ecoscope-workflows-ext-ste",     "0.0.18.*"],
-            ["ecoscope-workflows-ext-mnc",     "0.0.8.*"],
+            ["ecoscope-platform",              ">=2.15.0, <2.16.0"],
+            ["ecoscope-workflows-ext-custom",  "0.1.0rc14.*"],
+            ["ecoscope-workflows-ext-ste",     "0.0.0rc1.*"],
+            ["ecoscope-workflows-ext-mnc",     "1.0.0.*"],
+            ["pydeck",                         "0.9.2"],
+            ["opentelemetry-sdk",              ">=1.20.0, <2.0.0"],
         ],
         [7*cm, W - 7*cm],
     ),
