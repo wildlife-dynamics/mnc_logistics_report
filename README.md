@@ -35,8 +35,6 @@ https://github.com/wildlife-dynamics/mnc_logistics_report.git
 
 Then click **Add Template**.
 
-![Add Workflow Template](data/screenshots/add_workflow.png)
-
 ---
 
 ### Step 2 — Configure the EarthRanger Connection
@@ -54,15 +52,11 @@ Navigate to **Data Sources** and click **Connect**, then select **EarthRanger**.
 
 Click **Connect** to save.
 
-![EarthRanger Connection](data/screenshots/er_connection.png)
-
 ---
 
 ### Step 3 — Select the Workflow
 
 After the template is added, it appears in the **Workflow Templates** list as **logistics_report**. Click the card to open the workflow configuration form.
-
-![Select Workflow Template](data/screenshots/select_workflow.png)
 
 ---
 
@@ -90,8 +84,6 @@ The configuration form has three sections on a single page.
 Select the EarthRanger data source configured in Step 2 from the **Data Source** dropdown (e.g. `Mara North Conservancy`).
 
 Once all three sections are filled, click **Submit**.
-
-![Configure Workflow Details, Time Range, and Connect to EarthRanger](data/screenshots/configure_workflow.png)
 
 ---
 
