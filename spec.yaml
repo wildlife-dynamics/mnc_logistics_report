@@ -322,6 +322,9 @@ workflow:
   - name: Create balloon landing summary table widget
     id: balloon_landing_table_widget
     task: create_table_widget_single_view
+    skipif:
+      conditions:
+        - never
     partial:
       title: "Balloon Landing Summary"
       data: ${{ workflow.balloon_landing_table_html_url.return }}
@@ -449,6 +452,9 @@ workflow:
   - name: Create airstrip operations summary table widget
     id: airstrip_op_table_widget
     task: create_table_widget_single_view
+    skipif:
+      conditions:
+        - never
     partial:
       title: "Airstrip Operations Summary"
       data: ${{ workflow.airstrip_op_table_html_url.return }}
@@ -515,6 +521,9 @@ workflow:
   - name: Create airstrip maintenance summary table widget
     id: airstrip_maint_table_widget
     task: create_table_widget_single_view
+    skipif:
+      conditions:
+        - never
     partial:
       title: "Airstrip Maintenance Summary"
       data: ${{ workflow.airstrip_maint_table_html_url.return }}
